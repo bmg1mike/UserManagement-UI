@@ -10,6 +10,7 @@ import MyTellersPage from '@/pages/MyTellersPage'
 import SupervisorDashboardPage from '@/pages/SupervisorDashboardPage'
 import TellerSummaryPage from '@/pages/TellerSummaryPage'
 import TellerTransactionsPage from '@/pages/TellerTransactionsPage'
+import DownloadAuditReportPage from '@/pages/DownloadAuditReportPage'
 import { AuthLayout } from '@/components/layout'
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
           <Route path="/my-tellers" element={<MyTellersPage />} />
           <Route path="/bulk-upload" element={<BulkUploadPage />} />
           <Route path="/audit-logs" element={<AuditLogsPage />} />
+          <Route path="/download-audit-report" element={<DownloadAuditReportPage />} />
           <Route path="/deleted-users" element={<DeletedUsersPage />} />
           <Route path="/settings" element={<div className="text-2xl font-bold">Settings Page</div>} />
         </Route>

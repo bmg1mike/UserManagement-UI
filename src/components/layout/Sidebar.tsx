@@ -10,6 +10,7 @@ import {
   FiActivity,
   FiTrash2,
   FiBarChart,
+  FiFileText,
 } from 'react-icons/fi'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -33,6 +34,7 @@ const navItems: NavItem[] = [
   { label: 'Bulk Upload', path: '/bulk-upload', icon: <FiUploadCloud className="w-5 h-5" />, allowedRoles: ['ADMIN', 'IMTO', 'COB', 'USERACCESS'] },
   { label: 'Deleted Users', path: '/deleted-users', icon: <FiTrash2 className="w-5 h-5" />, allowedRoles: ['ADMIN', 'IMTO', 'COB', 'USERACCESS'] },
   { label: 'Audit Logs', path: '/audit-logs', icon: <FiActivity className="w-5 h-5" />, allowedRoles: ['ADMIN', 'AUDIT', 'USERACCESS'] },
+  { label: 'Download Audit Report', path: '/download-audit-report', icon: <FiFileText className="w-5 h-5" />, allowedRoles: ['ADMIN', 'AUDIT', 'USERACCESS'] },
 ]
 
 export default function Sidebar() {
