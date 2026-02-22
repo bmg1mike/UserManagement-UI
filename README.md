@@ -10,8 +10,10 @@ This portal provides a secure interface for administrators to manage users, perf
 
 ### Authentication & Security
 - 🔐 Email/password login with JWT tokens
-- 🔑 Two-Factor Authentication (2FA)
+- � AES-256-CBC encryption for sensitive data transmission
+- 🔑 Two-Factor Authentication (2FA) with encrypted requests/responses
 - 🔄 Automatic token refresh
+- 🔑 API key authentication for encryption configuration
 - 🚪 Secure logout with session cleanup
 
 ### User Management
@@ -54,6 +56,7 @@ This portal provides a secure interface for administrators to manage users, perf
 ### Other Libraries
 - **Alerts:** SweetAlert2
 - **Excel:** xlsx (for bulk operations)
+- **Encryption:** crypto-js (AES-256-CBC encryption/decryption)
 
 ### DevOps
 - **Containerization:** Docker with multi-stage builds
@@ -87,6 +90,7 @@ Create a `.env` file in the project root:
 
 ```env
 VITE_API_BASE_URL=https://actimizemduat.ubagroup.com:8444/api
+VITE_API_KEY=H0RH8X1E44VA
 ```
 
 ### 4. Run Development Server
@@ -160,6 +164,7 @@ ActimizeUserManagementPortal/
 │   │       └── AddUserModal.tsx # Add user dialog
 │   ├── lib/
 │   │   ├── axios.ts             # Axios instance with interceptors
+│   │   ├── encryption.ts        # AES-256-CBC encryption utilities
 │   │   ├── sweet-alert.ts       # SweetAlert2 wrapper
 │   │   └── utils.ts             # Utility functions
 │   ├── pages/
@@ -184,8 +189,9 @@ ActimizeUserManagementPortal/
 ## 🔌 API Endpoints
 
 ### Authentication
-- `POST /Auth/login` - User login (returns temp token)
-- `POST /Auth/verify-2fa` - Verify 2FA code (returns access/refresh tokens)
+- `GET /Auth/non-fetch` - Get encryption configuration (requires X-API-Key header)
+- `POST /Auth/AddtionalEncryptedLogin` - User login with encrypted credentials (returns encrypted temp token)
+- `POST /Auth/EncryptedVerify2FA` - Verify 2FA code with encrypted token (returns encrypted access/refresh tokens)
 - `POST /Auth/logout` - Logout user
 
 ### User Management
@@ -196,11 +202,26 @@ ActimizeUserManagementPortal/
 
 ## 🔒 Authentication Flow
 
-1. **Login:** User enters email/password → receives temporary token
-2. **2FA:** User enters verification code with temp token → receives access token and refresh token
-3. **Authorized Requests:** All API calls include `Authorization: Bearer <accessToken>`
-4. **Token Refresh:** On 401 error, system automatically refreshes using refresh token
-5. **Logout:** Calls logout endpoint and clears all local storage
+1. **Encryption Config:** App fetches encryption key and IV from `/Auth/non-fetch` using X-API-Key header
+2. **Login:** 
+   - User enters email/password
+   - Credentials are encrypted using AES-256-CBC
+   - Encrypted data sent to `/Auth/AddtionalEncryptedLogin`
+   - Response is decrypted to get temporary token
+3. **2FA:** 
+   - User enters 8-digit verification code
+   - Token object `{Token: "123456"}` is encrypted
+   - Encrypted data sent to `/Auth/EncryptedVerify2FA` with Bearer token
+   - Response is decrypted to get access token, refresh token, and user data
+4. **Authorized Requests:** All API calls include `Authorization: Bearer <accessToken>`
+5. **Token Refresh:** On 401 error, system automatically refreshes using refresh token
+6. **Logout:** Calls logout endpoint and clears all local storage
+
+### Encryption Details
+- **Algorithm:** AES-256-CBC
+- **Library:** crypto-js
+- **Key & IV:** Fetched dynamically from backend on app initialization
+- **Flow:** Request data → JSON.stringify → encrypt → send | Response → decrypt → JSON.parse
 
 ## 🎨 Styling & Theming
 
@@ -220,6 +241,7 @@ ActimizeUserManagementPortal/
 {
   "@tanstack/react-query": "^5.62.11",
   "axios": "^1.7.9",
+  "crypto-js": "^4.2.0",
   "react": "^18.3.1",
   "react-router-dom": "^7.1.3",
   "sweetalert2": "^11.15.3",
@@ -275,6 +297,7 @@ All environment variables must be prefixed with `VITE_` to be accessible in the 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `VITE_API_BASE_URL` | Backend API base URL | `https://actimizemduat.ubagroup.com:8444/api` |
+| `VITE_API_KEY` | API key for encryption config endpoint | `H0RH8X1E44VA` |
 
 ## 🐛 Troubleshooting
 

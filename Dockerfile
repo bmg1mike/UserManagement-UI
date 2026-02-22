@@ -4,8 +4,9 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Build argument for API URL
+# Build arguments for API URL and API Key
 ARG VITE_API_BASE_URL=https://actimizemduat.ubagroup.com:8444/api
+ARG VITE_API_KEY=H0RH8X1E44VA
 
 # Install dependencies
 COPY package.json package-lock.json* ./
@@ -14,8 +15,9 @@ RUN npm ci || npm install
 # Copy the rest of the source code
 COPY . .
 
-# Create .env file from build argument
-RUN echo "VITE_API_BASE_URL=${VITE_API_BASE_URL}" > .env
+# Create .env file from build arguments
+RUN echo "VITE_API_BASE_URL=${VITE_API_BASE_URL}" > .env && \
+    echo "VITE_API_KEY=${VITE_API_KEY}" >> .env
 
 # Build the app
 RUN npm run build

@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast, alert } from '@/lib/sweet-alert'
 import api from '@/lib/axios'
+import { encrypt, decrypt } from '@/lib/encryption'
 
 export default function TwoFactorPage() {
   const navigate = useNavigate()
@@ -27,28 +28,61 @@ export default function TwoFactorPage() {
     localStorage.removeItem('token')
 
     try {
-      const response = await api.post('/Auth/verify-2fa', { token }, {
+      console.log('2FA - OTP token:', token)
+      console.log('2FA - Temp token from login:', tempToken)
+      
+      // Create the request body with PascalCase Token property
+      const requestBody = {
+        Token: token
+      }
+      const requestJson = JSON.stringify(requestBody)
+      console.log('2FA - Request JSON:', requestJson)
+      
+      // Encrypt the request body before sending
+      const encryptedToken = await encrypt(requestJson)
+      console.log('2FA - Encrypted token:', encryptedToken)
+      
+      const response = await api.post('/Auth/EncryptedVerify2FA', encryptedToken, {
         headers: {
-          Authorization: `Bearer ${tempToken}`
+          Authorization: `Bearer ${tempToken}`,
+          'Content-Type': 'application/json',
         }
       })
       
-      // Store tokens from 2FA response
-      if (response.data.data?.accessToken) {
-        localStorage.setItem('accessToken', response.data.data.accessToken)
+      console.log('2FA - Raw response:', response.data)
+      
+      // Decrypt the response
+      const decryptedResponse = await decrypt(response.data)
+      console.log('2FA - Decrypted response:', decryptedResponse)
+      
+      const data = JSON.parse(decryptedResponse)
+      console.log('2FA - Parsed response data:', data)
+      
+      // Store tokens from 2FA response (API returns PascalCase properties)
+      if (data.Data?.AccessToken) {
+        console.log('2FA - Storing access token:', data.Data.AccessToken)
+        localStorage.setItem('accessToken', data.Data.AccessToken)
+      } else {
+        console.error('2FA - No access token found')
       }
-      if (response.data.data?.refreshToken) {
-        localStorage.setItem('refreshToken', response.data.data.refreshToken)
+      
+      if (data.Data?.RefreshToken) {
+        console.log('2FA - Storing refresh token')
+        localStorage.setItem('refreshToken', data.Data.RefreshToken)
       }
+      
       // Store user info
-      if (response.data.data) {
+      if (data.Data) {
+        console.log('2FA - Storing user info:', data.Data)
         localStorage.setItem('user', JSON.stringify({
-          email: response.data.data.email,
-          businessUnit: response.data.data.businessUnit,
-          solid: response.data.data.solid,
-          userId: response.data.data.userId,
-          role: response.data.data.role,
+          email: data.Data.Email,
+          businessUnit: data.Data.BusinessUnit,
+          solid: data.Data.SOLID,
+          userId: data.Data.UserId,
+          role: data.Data.Role,
         }))
+      } else {
+        console.error('2FA - No user data found')
       }
       
       toast.success('Verification successful!')

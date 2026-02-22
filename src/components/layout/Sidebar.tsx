@@ -7,6 +7,8 @@ import {
   FiMenu,
   FiX,
   FiChevronLeft,
+  FiActivity,
+  FiTrash2,
 } from 'react-icons/fi'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -19,11 +21,14 @@ interface NavItem {
   label: string
   path: string
   icon: React.ReactNode
+  allowedRoles?: string[]
 }
 
 const navItems: NavItem[] = [
   { label: 'Users', path: '/users', icon: <FiUsers className="w-5 h-5" /> },
   { label: 'Bulk Upload', path: '/bulk-upload', icon: <FiUploadCloud className="w-5 h-5" /> },
+  { label: 'Deleted Users', path: '/deleted-users', icon: <FiTrash2 className="w-5 h-5" /> },
+  { label: 'Audit Logs', path: '/audit-logs', icon: <FiActivity className="w-5 h-5" />, allowedRoles: ['ADMIN', 'AUDIT'] },
 ]
 
 export default function Sidebar() {
@@ -46,6 +51,13 @@ export default function Sidebar() {
   }
 
   const user = getUserInfo()
+
+  // Check if user has access to a nav item
+  const hasAccess = (item: NavItem) => {
+    if (!item.allowedRoles) return true
+    if (!user?.role) return false
+    return item.allowedRoles.includes(user.role.toUpperCase())
+  }
   
   // Parse name from email (e.g., "john.doe@ubagroup.com" -> "John Doe")
   const getNameFromEmail = (email: string): string => {
@@ -109,7 +121,7 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1">
-        {navItems.map((item) => (
+        {navItems.filter(item => hasAccess(item)).map((item) => (
           <NavLink
             key={item.path}
             to={item.path}

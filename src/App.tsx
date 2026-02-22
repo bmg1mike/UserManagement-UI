@@ -4,6 +4,8 @@ import TwoFactorPage from '@/pages/TwoFactorPage'
 import DashboardPage from '@/pages/DashboardPage'
 import UsersPage from '@/pages/UsersPage'
 import BulkUploadPage from '@/pages/BulkUploadPage'
+import AuditLogsPage from '@/pages/AuditLogsPage'
+import DeletedUsersPage from '@/pages/DeletedUsersPage'
 import { AuthLayout } from '@/components/layout'
 
 function App() {
@@ -18,6 +20,8 @@ function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/bulk-upload" element={<BulkUploadPage />} />
+          <Route path="/audit-logs" element={<AuditLogsPage />} />
+          <Route path="/deleted-users" element={<DeletedUsersPage />} />
           <Route path="/settings" element={<div className="text-2xl font-bold">Settings Page</div>} />
         </Route>
       </Routes>

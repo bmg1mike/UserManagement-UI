@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from '@/lib/sweet-alert'
 import api from '@/lib/axios'
+import { encrypt, decrypt } from '@/lib/encryption'
 
 interface LoginCredentials {
   email: string
@@ -41,14 +42,37 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      const response = await api.post('/Auth/login', credentials)
+      // Encrypt the credentials before sending
+      const credentialsJson = JSON.stringify(credentials)
+      console.log('Login - Credentials JSON:', credentialsJson)
       
-      // Store the token for 2FA verification
-      if (response.data.data?.token) {
-        localStorage.setItem('token', response.data.data.token)
+      const encryptedCredentials = await encrypt(credentialsJson)
+      console.log('Login - Encrypted credentials:', encryptedCredentials)
+      
+      const response = await api.post('/Auth/AddtionalEncryptedLogin', encryptedCredentials, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+      
+      console.log('Login - Raw response:', response.data)
+      
+      // Decrypt the response
+      const decryptedResponse = await decrypt(response.data)
+      console.log('Login - Decrypted response:', decryptedResponse)
+      
+      const responseData = JSON.parse(decryptedResponse)
+      console.log('Login - Parsed response data:', responseData)
+      
+      // Store the token for 2FA verification (note: API returns PascalCase properties)
+      if (responseData.Data?.Token) {
+        console.log('Login - Storing token for 2FA:', responseData.Data.Token)
+        localStorage.setItem('token', responseData.Data.Token)
+      } else {
+        console.error('Login - No token found in response data:', responseData)
       }
       
-      toast.success(response.data.message || 'Please verify your identity')
+      toast.success(responseData.Message || 'Please verify your identity')
       navigate('/2fa')
     } catch (error) {
       toast.error('Invalid email or password')
