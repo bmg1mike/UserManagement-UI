@@ -1,11 +1,15 @@
 import { useQuery } from '@tanstack/react-query'
-import { FiUsers, FiSearch, FiRefreshCw, FiChevronLeft, FiChevronRight, FiFilter, FiX, FiDownload } from 'react-icons/fi'
+import { FiUsers, FiRefreshCw, FiFilter, FiX, FiDownload } from 'react-icons/fi'
 import api from '@/lib/axios'
 import { toast, alert } from '@/lib/sweet-alert'
 import { Button } from '@/components/ui/button'
 import AddUserModal from '@/components/users/AddUserModal'
+import EditUserModal from '@/components/users/EditUserModal'
 import { Input } from '@/components/ui/input'
+import { mapRoleToString } from '@/lib/roleUtils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Table,
   TableBody,
@@ -22,128 +26,135 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { useState, useMemo } from 'react'
-
-const ITEMS_PER_PAGE = 10
 
 interface User {
   userId: string
   email: string
-  normalizedEmail?: string
+  normalizedEmail: string
   firstName: string
   lastName: string
-  createdById?: string
+  createdById: string
   role: string
   isActive: boolean
   solid: string
   businessUnit: string
   lastLogin?: string
-  delFlag?: string
-  createdAt?: string
-  lastUpdatedAt?: string
-  lastUpdatedById?: string
+  delFlag: string
+  createdAt: string
 }
 
-const fetchUsers = async (): Promise<User[]> => {
-  const response = await api.get<User[]>('/PortalUser/GetUsers')
-  return response.data || []
+interface UsersResponse {
+  success: boolean
+  data: User[]
+  meta: {
+    totalCount: number
+    page: number
+    pageSize: number
+    totalPages: number
+    hasNextPage: boolean
+    hasPreviousPage: boolean
+  }
 }
 
 export default function UsersPage() {
-  const [searchTerm, setSearchTerm] = useState('')
-  const [currentPage, setCurrentPage] = useState(1)
-  const [roleFilter, setRoleFilter] = useState<string>('all')
-  const [businessUnitFilter, setBusinessUnitFilter] = useState<string>('all')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const navigate = useNavigate()
+  const [page, setPage] = useState(1)
+  const [pageSize] = useState(50)
   const [isExporting, setIsExporting] = useState(false)
 
+  // Filter states
+  const [isActiveFilter, setIsActiveFilter] = useState<string>('all')
+  const [emailFilter, setEmailFilter] = useState('')
+  const [solIdFilter, setSolIdFilter] = useState('')
+  const [businessUnitFilter, setBusinessUnitFilter] = useState('')
+  const [roleFilter, setRoleFilter] = useState('')
+  const [firstNameFilter, setFirstNameFilter] = useState('')
+  const [lastNameFilter, setLastNameFilter] = useState('')
+
+  // Check if AUDIT or SUPERVISOR role user trying to access this page
+  useEffect(() => {
+    try {
+      const userStr = localStorage.getItem('user')
+      if (userStr) {
+        const user = JSON.parse(userStr)
+        if (user.role === 'AUDIT') {
+          toast.error('Access denied')
+          navigate('/audit-logs')
+        } else if (user.role === 'SUPERVISOR') {
+          toast.error('Access denied. Supervisors cannot access this page.')
+          navigate('/supervisor-dashboard')
+        }
+      }
+    } catch (error) {
+      console.error('Error checking user role:', error)
+    }
+  }, [navigate])
+
   const {
-    data: users = [],
+    data,
     isLoading,
     isError,
     error,
     refetch,
     isFetching,
-  } = useQuery({
-    queryKey: ['users'],
-    queryFn: fetchUsers,
+  } = useQuery<UsersResponse>({
+    queryKey: ['users', page, pageSize, isActiveFilter, emailFilter, solIdFilter, businessUnitFilter, roleFilter, firstNameFilter, lastNameFilter],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        pageSize: pageSize.toString(),
+      })
+
+      if (isActiveFilter !== 'all') {
+        params.append('isActive', isActiveFilter === 'active' ? 'true' : 'false')
+      }
+      if (emailFilter) params.append('email', emailFilter)
+      if (solIdFilter) params.append('solId', solIdFilter)
+      if (businessUnitFilter) params.append('businessUnit', businessUnitFilter)
+      if (roleFilter) params.append('role', roleFilter)
+      if (firstNameFilter) params.append('firstName', firstNameFilter)
+      if (lastNameFilter) params.append('lastName', lastNameFilter)
+
+      const response = await api.get(`/PortalUser/GetUsers?${params.toString()}`)
+      
+      // Map numeric role values to string names
+      if (response.data?.data && Array.isArray(response.data.data)) {
+        response.data.data = response.data.data.map((user: User) => ({
+          ...user,
+          role: mapRoleToString(user.role as any)
+        }))
+      }
+      
+      return response.data
+    },
+    staleTime: 30000, // 30 seconds
   })
 
-  // Get unique values for filter dropdowns
-  const { roles, businessUnits } = useMemo(() => {
-    const rolesSet = new Set<string>()
-    const businessUnitsSet = new Set<string>()
-    
-    users.forEach((user) => {
-      if (user.role) rolesSet.add(user.role.trim())
-      if (user.businessUnit) businessUnitsSet.add(user.businessUnit.trim())
-    })
-    
-    return {
-      roles: Array.from(rolesSet).sort(),
-      businessUnits: Array.from(businessUnitsSet).sort(),
-    }
-  }, [users])
-
-  const filteredUsers = useMemo(() => {
-    const search = searchTerm.toLowerCase()
-    return users.filter((user) => {
-      // Text search
-      const matchesSearch = 
-        user.email?.toLowerCase().includes(search) ||
-        user.firstName?.toLowerCase().includes(search) ||
-        user.lastName?.toLowerCase().includes(search) ||
-        user.role?.toLowerCase().includes(search) ||
-        user.businessUnit?.toLowerCase().includes(search) ||
-        user.solid?.toLowerCase().includes(search)
-      
-      // Role filter
-      const matchesRole = roleFilter === 'all' || user.role === roleFilter
-      
-      // Business Unit filter
-      const matchesBusinessUnit = businessUnitFilter === 'all' || user.businessUnit === businessUnitFilter
-      
-      // Status filter
-      const matchesStatus = 
-        statusFilter === 'all' || 
-        (statusFilter === 'active' && user.isActive) ||
-        (statusFilter === 'inactive' && !user.isActive)
-      
-      return matchesSearch && matchesRole && matchesBusinessUnit && matchesStatus
-    })
-  }, [users, searchTerm, roleFilter, businessUnitFilter, statusFilter])
-
   // Check if any filters are active
-  const hasActiveFilters = roleFilter !== 'all' || businessUnitFilter !== 'all' || statusFilter !== 'all' || searchTerm !== ''
+  const hasActiveFilters = 
+    isActiveFilter !== 'all' || 
+    emailFilter !== '' || 
+    solIdFilter !== '' || 
+    businessUnitFilter !== '' || 
+    roleFilter !== '' || 
+    firstNameFilter !== '' || 
+    lastNameFilter !== ''
 
   // Reset all filters
   const clearFilters = () => {
-    setSearchTerm('')
-    setRoleFilter('all')
-    setBusinessUnitFilter('all')
-    setStatusFilter('all')
-    setCurrentPage(1)
+    setIsActiveFilter('all')
+    setEmailFilter('')
+    setSolIdFilter('')
+    setBusinessUnitFilter('')
+    setRoleFilter('')
+    setFirstNameFilter('')
+    setLastNameFilter('')
+    setPage(1)
   }
 
   // Reset to page 1 when filters change
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value)
-    setCurrentPage(1)
-  }
-
-  const handleRoleChange = (value: string) => {
-    setRoleFilter(value)
-    setCurrentPage(1)
-  }
-
-  const handleBusinessUnitChange = (value: string) => {
-    setBusinessUnitFilter(value)
-    setCurrentPage(1)
-  }
-
-  const handleStatusChange = (value: string) => {
-    setStatusFilter(value)
-    setCurrentPage(1)
+  const applyFilters = () => {
+    setPage(1)
   }
 
   // Export users function
@@ -172,16 +183,6 @@ export default function UsersPage() {
     } finally {
       setIsExporting(false)
     }
-  }
-
-  // Pagination calculations
-  const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE)
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
-  const endIndex = startIndex + ITEMS_PER_PAGE
-  const paginatedUsers = filteredUsers.slice(startIndex, endIndex)
-
-  const goToPage = (page: number) => {
-    setCurrentPage(Math.max(1, Math.min(page, totalPages)))
   }
 
   return (
@@ -213,74 +214,115 @@ export default function UsersPage() {
         </div>
       </div>
 
+      {/* Filters Card */}
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>All Users ({filteredUsers.length})</CardTitle>
-            <div className="relative w-72">
-              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <FiFilter className="w-5 h-5" />
+            Filters
+          </CardTitle>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-2">
+              <FiX className="w-4 h-4" />
+              Clear Filters
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Email Filter */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Email</label>
               <Input
-                placeholder="Search by name, email, role..."
-                value={searchTerm}
-                onChange={handleSearchChange}
-                className="pl-10"
+                placeholder="e.g., john@ubagroup.com"
+                value={emailFilter}
+                onChange={(e) => setEmailFilter(e.target.value)}
+                onBlur={applyFilters}
               />
             </div>
-          </div>
 
-          {/* Filters Row */}
-          <div className="flex items-center gap-4 mt-4 pt-4 border-t">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <FiFilter className="w-4 h-4" />
-              <span>Filters:</span>
+            {/* First Name Filter */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">First Name</label>
+              <Input
+                placeholder="e.g., Michael"
+                value={firstNameFilter}
+                onChange={(e) => setFirstNameFilter(e.target.value)}
+                onBlur={applyFilters}
+              />
             </div>
 
-            <Select value={roleFilter} onValueChange={handleRoleChange}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Role" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Roles</SelectItem>
-                {roles.map((role) => (
-                  <SelectItem key={role} value={role}>
-                    {role}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Last Name Filter */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Last Name</label>
+              <Input
+                placeholder="e.g., Smith"
+                value={lastNameFilter}
+                onChange={(e) => setLastNameFilter(e.target.value)}
+                onBlur={applyFilters}
+              />
+            </div>
 
-            <Select value={businessUnitFilter} onValueChange={handleBusinessUnitChange}>
-              <SelectTrigger className="w-44">
-                <SelectValue placeholder="Business Unit" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Business Units</SelectItem>
-                {businessUnits.map((bu) => (
-                  <SelectItem key={bu} value={bu}>
-                    {bu}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Role Filter */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Role</label>
+              <Input
+                placeholder="e.g., ADMIN"
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                onBlur={applyFilters}
+              />
+            </div>
 
-            <Select value={statusFilter} onValueChange={handleStatusChange}>
-              <SelectTrigger className="w-32">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Business Unit Filter */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Business Unit</label>
+              <Input
+                placeholder="e.g., HQ"
+                value={businessUnitFilter}
+                onChange={(e) => setBusinessUnitFilter(e.target.value)}
+                onBlur={applyFilters}
+              />
+            </div>
 
-            {hasActiveFilters && (
-              <Button variant="ghost" size="sm" onClick={clearFilters} className="text-muted-foreground hover:text-foreground">
-                <FiX className="w-4 h-4 mr-1" />
-                Clear filters
-              </Button>
-            )}
+            {/* SOLID Filter */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">SOL ID</label>
+              <Input
+                placeholder="e.g., 001"
+                value={solIdFilter}
+                onChange={(e) => setSolIdFilter(e.target.value)}
+                onBlur={applyFilters}
+              />
+            </div>
+
+            {/* Status Filter */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Status</label>
+              <Select value={isActiveFilter} onValueChange={(value) => {
+                setIsActiveFilter(value)
+                setPage(1)
+              }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Users Table Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            All Users {data && `(${data.meta.totalCount})`}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -294,7 +336,7 @@ export default function UsersPage() {
                 Try Again
               </Button>
             </div>
-          ) : filteredUsers.length === 0 ? (
+          ) : data?.data && data.data.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground">
               <p>{hasActiveFilters ? 'No users found matching your filters.' : 'No users found.'}</p>
               {hasActiveFilters && (
@@ -303,7 +345,7 @@ export default function UsersPage() {
                 </Button>
               )}
             </div>
-          ) : (
+          ) : data?.data ? (
             <>
               <div className="rounded-md border">
                 <Table>
@@ -313,20 +355,25 @@ export default function UsersPage() {
                       <TableHead>Name</TableHead>
                       <TableHead>Role</TableHead>
                       <TableHead>Business Unit</TableHead>
+                      <TableHead>SOL ID</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginatedUsers.map((user) => (
+                    {data.data.map((user) => (
                       <TableRow key={user.userId}>
-                        <TableCell className="font-medium">{user.email?.trim()}</TableCell>
+                        <TableCell className="font-medium">{user.email}</TableCell>
                         <TableCell className="capitalize">
-                          {`${user.firstName?.trim() || ''} ${user.lastName?.trim() || ''}`.trim() || '-'}
+                          {`${user.firstName} ${user.lastName}`.trim()}
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline">{user.role || '-'}</Badge>
+                          <Badge variant="outline">{user.role}</Badge>
                         </TableCell>
-                        <TableCell>{user.businessUnit || '-'}</TableCell>
+                        <TableCell>{user.businessUnit}</TableCell>
+                        <TableCell>
+                          <span className="font-mono text-xs">{user.solid}</span>
+                        </TableCell>
                         <TableCell>
                           <Badge
                             variant={user.isActive ? 'default' : 'secondary'}
@@ -335,48 +382,61 @@ export default function UsersPage() {
                             {user.isActive ? 'Active' : 'Inactive'}
                           </Badge>
                         </TableCell>
+                        <TableCell className="text-right">
+                          <EditUserModal user={user} />
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </div>
 
-              {/* Pagination Controls */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4">
-                  <p className="text-sm text-muted-foreground">
-                    Showing {startIndex + 1} to {Math.min(endIndex, filteredUsers.length)} of {filteredUsers.length} users
-                  </p>
+              {/* Pagination */}
+              {data && data.meta.totalPages > 1 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 pt-6 border-t">
+                  <div className="text-sm text-muted-foreground">
+                    Showing page {data.meta.page} of {data.meta.totalPages} ({data.meta.totalCount}{' '}
+                    total users)
+                  </div>
                   <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => goToPage(currentPage - 1)}
-                      disabled={currentPage === 1}
+                      onClick={() => setPage(1)}
+                      disabled={!data.meta.hasPreviousPage}
                     >
-                      <FiChevronLeft className="w-4 h-4" />
+                      First
                     </Button>
-                    
-                    {/* Page numbers */}
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={!data.meta.hasPreviousPage}
+                    >
+                      Previous
+                    </Button>
+
+                    {/* Page Numbers */}
+                    <div className="flex gap-1">
+                      {Array.from({ length: Math.min(5, data.meta.totalPages) }, (_, i) => {
                         let pageNum: number
-                        if (totalPages <= 5) {
+                        if (data.meta.totalPages <= 5) {
                           pageNum = i + 1
-                        } else if (currentPage <= 3) {
+                        } else if (data.meta.page <= 3) {
                           pageNum = i + 1
-                        } else if (currentPage >= totalPages - 2) {
-                          pageNum = totalPages - 4 + i
+                        } else if (data.meta.page >= data.meta.totalPages - 2) {
+                          pageNum = data.meta.totalPages - 4 + i
                         } else {
-                          pageNum = currentPage - 2 + i
+                          pageNum = data.meta.page - 2 + i
                         }
+
                         return (
                           <Button
                             key={pageNum}
-                            variant={currentPage === pageNum ? 'default' : 'outline'}
+                            variant={data.meta.page === pageNum ? 'default' : 'outline'}
                             size="sm"
-                            onClick={() => goToPage(pageNum)}
-                            className="w-8 h-8 p-0"
+                            onClick={() => setPage(pageNum)}
+                            className="w-9"
                           >
                             {pageNum}
                           </Button>
@@ -387,16 +447,24 @@ export default function UsersPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => goToPage(currentPage + 1)}
-                      disabled={currentPage === totalPages}
+                      onClick={() => setPage((p) => p + 1)}
+                      disabled={!data.meta.hasNextPage}
                     >
-                      <FiChevronRight className="w-4 h-4" />
+                      Next
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(data.meta.totalPages)}
+                      disabled={!data.meta.hasNextPage}
+                    >
+                      Last
                     </Button>
                   </div>
                 </div>
               )}
             </>
-          )}
+          ) : null}
         </CardContent>
       </Card>
     </div>

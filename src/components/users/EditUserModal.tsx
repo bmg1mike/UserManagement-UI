@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { FiUserPlus, FiAlertCircle } from 'react-icons/fi'
+import { FiEdit, FiAlertCircle } from 'react-icons/fi'
 import api from '@/lib/axios'
 import { toast } from '@/lib/sweet-alert'
 import { Button } from '@/components/ui/button'
@@ -22,57 +22,83 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 
-interface AddUserFormData {
+interface User {
+  userId: string
   email: string
-  name: string
+  firstName: string
+  lastName: string
   role: string
-  businessUnit: string
+  isActive: boolean
   solid: string
+  businessUnit: string
+}
+
+interface EditUserFormData {
+  email: string
+  businessUnit: string
+  solId: string
+  role: string
+  isActive: boolean
+}
+
+interface EditUserModalProps {
+  user: User
 }
 
 const ROLES = ['IMTO', 'USERACCESS', 'AUDIT', 'SUPERVISOR']
 
-const addUser = async (data: AddUserFormData) => {
-  const response = await api.post('/PortalUser/AddUser', data)
+const updateUser = async (userId: string, data: EditUserFormData) => {
+  const response = await api.put(`/PortalUser/UpdateUser/${userId}`, data)
   return response.data
 }
 
-export default function AddUserModal() {
+export default function EditUserModal({ user }: EditUserModalProps) {
   const [open, setOpen] = useState(false)
-  const [formData, setFormData] = useState<AddUserFormData>({
-    email: '',
-    name: '',
-    role: '',
-    businessUnit: '',
-    solid: '',
+  const [formData, setFormData] = useState<EditUserFormData>({
+    email: user.email,
+    businessUnit: user.businessUnit,
+    solId: user.solid,
+    role: user.role,
+    isActive: user.isActive,
   })
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const queryClient = useQueryClient()
 
+  // Update form data when user prop changes
+  useEffect(() => {
+    setFormData({
+      email: user.email,
+      businessUnit: user.businessUnit,
+      solId: user.solid,
+      role: user.role,
+      isActive: user.isActive,
+    })
+  }, [user])
+
   const mutation = useMutation({
-    mutationFn: addUser,
+    mutationFn: (data: EditUserFormData) => updateUser(user.userId, data),
     onSuccess: () => {
-      toast.success('User added successfully!')
+      toast.success('User updated successfully!')
       queryClient.invalidateQueries({ queryKey: ['users'] })
       setOpen(false)
-      resetForm()
     },
     onError: (error: unknown) => {
       const axiosError = error as { response?: { data?: { message?: string } }; message?: string }
-      const message = axiosError.response?.data?.message || axiosError.message || 'An error occurred while adding the user.'
+      const message = axiosError.response?.data?.message || axiosError.message || 'An error occurred while updating the user.'
       setErrorMessage(message)
     },
   })
 
   const resetForm = () => {
     setFormData({
-      email: '',
-      name: '',
-      role: '',
-      businessUnit: '',
-      solid: '',
+      email: user.email,
+      businessUnit: user.businessUnit,
+      solId: user.solid,
+      role: user.role,
+      isActive: user.isActive,
     })
     setErrorMessage(null)
   }
@@ -82,7 +108,7 @@ export default function AddUserModal() {
     setErrorMessage(null)
     
     // Validation
-    if (!formData.email || !formData.name || !formData.role || !formData.businessUnit || !formData.solid) {
+    if (!formData.email || !formData.role || !formData.businessUnit || !formData.solId) {
       setErrorMessage('Please fill in all required fields.')
       return
     }
@@ -97,7 +123,7 @@ export default function AddUserModal() {
     mutation.mutate(formData)
   }
 
-  const handleInputChange = (field: keyof AddUserFormData, value: string) => {
+  const handleInputChange = (field: keyof EditUserFormData, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
     if (errorMessage) setErrorMessage(null)
   }
@@ -108,19 +134,18 @@ export default function AddUserModal() {
       if (!isOpen) resetForm()
     }}>
       <DialogTrigger asChild>
-        <Button>
-          <FiUserPlus className="w-4 h-4 mr-2" />
-          Add User
+        <Button variant="ghost" size="sm">
+          <FiEdit className="w-4 h-4" />
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FiUserPlus className="w-5 h-5" />
-            Add New User
+            <FiEdit className="w-5 h-5" />
+            Edit User
           </DialogTitle>
           <DialogDescription>
-            Create a new portal user. All fields are required.
+            Update user information. Email, role, business unit, and SOL ID are required.
           </DialogDescription>
         </DialogHeader>
         
@@ -133,15 +158,12 @@ export default function AddUserModal() {
             </div>
           )}
 
-          <div className="space-y-2">
-            <Label htmlFor="name">Full Name</Label>
-            <Input
-              id="name"
-              placeholder="Enter full name"
-              value={formData.name}
-              onChange={(e) => handleInputChange('name', e.target.value)}
-              disabled={mutation.isPending}
-            />
+          {/* User Info Display */}
+          <div className="p-3 bg-muted rounded-lg">
+            <p className="text-sm font-medium">
+              {user.firstName} {user.lastName}
+            </p>
+            <p className="text-xs text-muted-foreground">User ID: {user.userId}</p>
           </div>
 
           <div className="space-y-2">
@@ -190,12 +212,27 @@ export default function AddUserModal() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="solid">SOLID</Label>
+            <Label htmlFor="solId">SOL ID</Label>
             <Input
-              id="solid"
-              placeholder="Enter SOLID code (e.g., 0999)"
-              value={formData.solid}
-              onChange={(e) => handleInputChange('solid', e.target.value)}
+              id="solId"
+              placeholder="Enter SOL ID (e.g., 0999)"
+              value={formData.solId}
+              onChange={(e) => handleInputChange('solId', e.target.value)}
+              disabled={mutation.isPending}
+            />
+          </div>
+
+          <div className="flex items-center justify-between p-3 border rounded-lg">
+            <div className="space-y-0.5">
+              <Label htmlFor="isActive">Active Status</Label>
+              <p className="text-xs text-muted-foreground">
+                Enable or disable this user account
+              </p>
+            </div>
+            <Switch
+              id="isActive"
+              checked={formData.isActive}
+              onCheckedChange={(checked: boolean) => handleInputChange('isActive', checked)}
               disabled={mutation.isPending}
             />
           </div>
@@ -213,10 +250,10 @@ export default function AddUserModal() {
               {mutation.isPending ? (
                 <>
                   <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>
-                  Adding...
+                  Updating...
                 </>
               ) : (
-                'Add User'
+                'Update User'
               )}
             </Button>
           </DialogFooter>

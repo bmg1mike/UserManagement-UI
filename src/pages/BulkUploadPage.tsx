@@ -1,5 +1,6 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useMutation } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { FiUploadCloud, FiFile, FiX, FiDownload, FiCheckCircle, FiAlertCircle } from 'react-icons/fi'
 import * as XLSX from 'xlsx'
 import api from '@/lib/axios'
@@ -31,9 +32,29 @@ const bulkUploadUsers = async (file: File): Promise<UploadResponse> => {
 }
 
 export default function BulkUploadPage() {
+  const navigate = useNavigate()
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [dragActive, setDragActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Check if AUDIT or SUPERVISOR role user trying to access this page
+  useEffect(() => {
+    try {
+      const userStr = localStorage.getItem('user')
+      if (userStr) {
+        const user = JSON.parse(userStr)
+        if (user.role === 'AUDIT') {
+          toast.error('Access denied')
+          navigate('/audit-logs')
+        } else if (user.role === 'SUPERVISOR') {
+          toast.error('Access denied. Supervisors cannot access this page.')
+          navigate('/supervisor-dashboard')
+        }
+      }
+    } catch (error) {
+      console.error('Error checking user role:', error)
+    }
+  }, [navigate])
 
   const mutation = useMutation({
     mutationFn: bulkUploadUsers,

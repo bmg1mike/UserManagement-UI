@@ -9,6 +9,7 @@ import {
   FiChevronLeft,
   FiActivity,
   FiTrash2,
+  FiBarChart,
 } from 'react-icons/fi'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -16,6 +17,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { confirm, toast } from '@/lib/sweet-alert'
 import api from '@/lib/axios'
+import { normalizeRole } from '@/lib/roleUtils'
 
 interface NavItem {
   label: string
@@ -25,10 +27,12 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: 'Users', path: '/users', icon: <FiUsers className="w-5 h-5" /> },
-  { label: 'Bulk Upload', path: '/bulk-upload', icon: <FiUploadCloud className="w-5 h-5" /> },
-  { label: 'Deleted Users', path: '/deleted-users', icon: <FiTrash2 className="w-5 h-5" /> },
-  { label: 'Audit Logs', path: '/audit-logs', icon: <FiActivity className="w-5 h-5" />, allowedRoles: ['ADMIN', 'AUDIT'] },
+  { label: 'Supervisor Dashboard', path: '/supervisor-dashboard', icon: <FiBarChart className="w-5 h-5" />, allowedRoles: ['SUPERVISOR'] },
+  { label: 'Teller Summary', path: '/teller-summary', icon: <FiActivity className="w-5 h-5" />, allowedRoles: ['SUPERVISOR'] },
+  { label: 'Users', path: '/users', icon: <FiUsers className="w-5 h-5" />, allowedRoles: ['ADMIN', 'IMTO', 'COB', 'USERACCESS'] },
+  { label: 'Bulk Upload', path: '/bulk-upload', icon: <FiUploadCloud className="w-5 h-5" />, allowedRoles: ['ADMIN', 'IMTO', 'COB', 'USERACCESS'] },
+  { label: 'Deleted Users', path: '/deleted-users', icon: <FiTrash2 className="w-5 h-5" />, allowedRoles: ['ADMIN', 'IMTO', 'COB', 'USERACCESS'] },
+  { label: 'Audit Logs', path: '/audit-logs', icon: <FiActivity className="w-5 h-5" />, allowedRoles: ['ADMIN', 'AUDIT', 'USERACCESS'] },
 ]
 
 export default function Sidebar() {
@@ -51,12 +55,32 @@ export default function Sidebar() {
   }
 
   const user = getUserInfo()
+  
+  // Debug: Log user role
+  console.log('Sidebar - Current user:', user)
 
   // Check if user has access to a nav item
   const hasAccess = (item: NavItem) => {
     if (!item.allowedRoles) return true
-    if (!user?.role) return false
-    return item.allowedRoles.includes(user.role.toUpperCase())
+    if (!user?.role) {
+      console.log('Sidebar - No user role found for item:', item.label)
+      return false
+    }
+    // Normalize roles for comparison
+    const normalizedUserRole = normalizeRole(user.role)
+    const normalizedAllowedRoles = item.allowedRoles.map(normalizeRole)
+    const hasPermission = normalizedAllowedRoles.includes(normalizedUserRole)
+    
+    console.log('Sidebar Access Check:', {
+      item: item.label,
+      userRole: user.role,
+      normalizedRole: normalizedUserRole,
+      allowedRoles: item.allowedRoles,
+      normalizedAllowedRoles,
+      hasPermission
+    })
+    
+    return hasPermission
   }
   
   // Parse name from email (e.g., "john.doe@ubagroup.com" -> "John Doe")

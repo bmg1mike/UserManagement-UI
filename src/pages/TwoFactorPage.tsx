@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { toast, alert } from '@/lib/sweet-alert'
 import api from '@/lib/axios'
 import { encrypt, decrypt } from '@/lib/encryption'
+import { mapRoleToString } from '@/lib/roleUtils'
 
 export default function TwoFactorPage() {
   const navigate = useNavigate()
@@ -73,14 +74,42 @@ export default function TwoFactorPage() {
       
       // Store user info
       if (data.Data) {
-        console.log('2FA - Storing user info:', data.Data)
-        localStorage.setItem('user', JSON.stringify({
-          email: data.Data.Email,
-          businessUnit: data.Data.BusinessUnit,
-          solid: data.Data.SOLID,
-          userId: data.Data.UserId,
-          role: data.Data.Role,
-        }))
+        console.log('2FA - Full Data object:', JSON.stringify(data.Data, null, 2))
+        console.log('2FA - Available fields:', Object.keys(data.Data))
+        
+        const roleValue = data.Data.Role ?? data.Data.role ?? data.Data.UserRole ?? data.Data.userRole
+        const role = mapRoleToString(roleValue)
+        const userId = data.Data.UserId || data.Data.userId || data.Data.Id || data.Data.id || ''
+        
+        console.log('2FA - Raw role value:', roleValue)
+        console.log('2FA - Mapped role:', role)
+        console.log('2FA - Extracted userId:', userId)
+        
+        const userInfo = {
+          email: data.Data.Email || data.Data.email,
+          businessUnit: data.Data.BusinessUnit || data.Data.businessUnit,
+          solid: data.Data.SOLID || data.Data.solid || data.Data.SolId || data.Data.solId,
+          userId: userId,
+          role: role,
+        }
+        
+        console.log('2FA - Storing user info:', userInfo)
+        localStorage.setItem('user', JSON.stringify(userInfo))
+        
+        // Redirect based on role
+        if (role === 'AUDIT') {
+          console.log('2FA - Redirecting AUDIT user to audit-logs')
+          toast.success('Verification successful!')
+          navigate('/audit-logs')
+          return
+        }
+        
+        if (role === 'SUPERVISOR') {
+          console.log('2FA - Redirecting SUPERVISOR user to supervisor-dashboard')
+          toast.success('Verification successful!')
+          navigate('/supervisor-dashboard')
+          return
+        }
       } else {
         console.error('2FA - No user data found')
       }

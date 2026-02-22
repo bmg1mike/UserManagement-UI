@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dialog'
 import api from '@/lib/axios'
 import { toast } from '@/lib/sweet-alert'
+import { normalizeRole } from '@/lib/roleUtils'
 
 interface AuditLog {
   id: number
@@ -77,9 +78,16 @@ export default function AuditLogsPage() {
         }
 
         const user = JSON.parse(userStr)
-        const allowedRoles = ['ADMIN', 'AUDIT']
+        const allowedRoles = ['ADMIN', 'AUDIT', 'USERACCESS']
         
-        if (!user.role || !allowedRoles.includes(user.role.toUpperCase())) {
+        // Normalize roles for comparison using shared utility
+        const normalizedUserRole = normalizeRole(user.role || '')
+        const normalizedAllowedRoles = allowedRoles.map(normalizeRole)
+        
+        console.log('Audit Logs Access Check:', { userRole: user.role, normalizedRole: normalizedUserRole, allowedRoles: normalizedAllowedRoles })
+        
+        if (!user.role || !normalizedAllowedRoles.includes(normalizedUserRole)) {
+          console.warn('Access denied for role:', user.role)
           toast.error('You do not have permission to access audit logs')
           navigate('/users')
           return

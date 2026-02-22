@@ -1,11 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { FiClock, FiUser, FiTrash2, FiMail } from 'react-icons/fi'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import api from '@/lib/axios'
 import { toast } from '@/lib/sweet-alert'
+import { mapRoleToString } from '@/lib/roleUtils'
 
 interface DeletedUser {
   userId: string
@@ -37,13 +39,42 @@ interface DeletedUsersResponse {
 }
 
 export default function DeletedUsersPage() {
+  const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const [pageSize] = useState(20)
+
+  // Check if AUDIT or SUPERVISOR role user trying to access this page
+  useEffect(() => {
+    try {
+      const userStr = localStorage.getItem('user')
+      if (userStr) {
+        const user = JSON.parse(userStr)
+        if (user.role === 'AUDIT') {
+          toast.error('Access denied')
+          navigate('/audit-logs')
+        } else if (user.role === 'SUPERVISOR') {
+          toast.error('Access denied. Supervisors cannot access this page.')
+          navigate('/supervisor-dashboard')
+        }
+      }
+    } catch (error) {
+      console.error('Error checking user role:', error)
+    }
+  }, [navigate])
 
   const { data, isLoading, error } = useQuery<DeletedUsersResponse>({
     queryKey: ['deletedUsers', page, pageSize],
     queryFn: async () => {
       const response = await api.get(`/PortalUser/GetDeletedUsers?page=${page}&pageSize=${pageSize}`)
+      
+      // Map numeric role values to string names
+      if (response.data?.data && Array.isArray(response.data.data)) {
+        response.data.data = response.data.data.map((user: DeletedUser) => ({
+          ...user,
+          role: mapRoleToString(user.role as any)
+        }))
+      }
+      
       return response.data
     },
     staleTime: 30000, // 30 seconds
