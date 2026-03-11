@@ -10,6 +10,7 @@ import {
   FiUser,
   FiMail,
   FiHash,
+  FiDownload,
 } from 'react-icons/fi'
 import api from '@/lib/axios'
 import { toast } from '@/lib/sweet-alert'
@@ -73,6 +74,7 @@ export default function TellerTransactionsPage() {
   const { tellerId } = useParams<{ tellerId: string }>()
   const [page, setPage] = useState(1)
   const [pageSize] = useState(20)
+  const [isDownloading, setIsDownloading] = useState(false)
 
   // Filter states
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -132,6 +134,71 @@ export default function TellerTransactionsPage() {
 
   const applyFilters = () => {
     setPage(1) // Reset to first page when filters change
+  }
+
+  const handleDownloadReport = async () => {
+    if (!tellerId) {
+      toast.error('Teller ID is required')
+      return
+    }
+
+    // Validate date range if provided
+    if (fromDate && toDate && new Date(fromDate) > new Date(toDate)) {
+      toast.error('From Date cannot be later than To Date')
+      return
+    }
+
+    setIsDownloading(true)
+    try {
+      const params = new URLSearchParams()
+
+      if (statusFilter !== 'all') params.append('status', statusFilter)
+      if (fromDate) params.append('fromDate', fromDate)
+      if (toDate) params.append('toDate', toDate)
+
+      const response = await api.get(`/Supervisor/download-teller-transactions/${tellerId}?${params.toString()}`, {
+        responseType: 'blob',
+      })
+
+      // Create a blob from the response
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      })
+
+      // Create a link element and trigger download
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+      link.download = `Teller_Transactions_${tellerId}_${timestamp}.xlsx`
+
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      toast.success('Report downloaded successfully!')
+    } catch (error) {
+      console.error('Error downloading report:', error)
+      const axiosError = error as { response?: { data?: Blob }; message?: string }
+      
+      // Try to parse error message from blob
+      if (axiosError.response?.data instanceof Blob) {
+        try {
+          const text = await axiosError.response.data.text()
+          const errorData = JSON.parse(text)
+          toast.error(errorData.message || 'Failed to download report')
+        } catch {
+          toast.error('Failed to download report. Please try again.')
+        }
+      } else {
+        toast.error('Failed to download report. Please try again.')
+      }
+    } finally {
+      setIsDownloading(false)
+    }
   }
 
   const formatDateTime = (dateString: string) => {
@@ -239,6 +306,15 @@ export default function TellerTransactionsPage() {
             Teller Transactions
           </h1>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleDownloadReport}
+          disabled={isDownloading}
+        >
+          <FiDownload className={`w-4 h-4 ${isDownloading ? 'animate-bounce' : ''}`} />
+          <span className="ml-2">{isDownloading ? 'Downloading...' : 'Download'}</span>
+        </Button>
         <Button
           variant="outline"
           size="sm"

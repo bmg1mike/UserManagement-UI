@@ -10,10 +10,14 @@ import {
   FiXCircle,
   FiUnlock,
   FiEye,
+  FiFilter,
+  FiX,
+  FiDownload,
 } from 'react-icons/fi'
 import api from '@/lib/axios'
 import { toast } from '@/lib/sweet-alert'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -55,6 +59,13 @@ export default function TellerSummaryPage() {
   const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const [pageSize] = useState(20)
+  const [isDownloading, setIsDownloading] = useState(false)
+
+  // Filter states
+  const [emailFilter, setEmailFilter] = useState('')
+  const [nameFilter, setNameFilter] = useState('')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
 
   // Check if user has SUPERVISOR role
   useEffect(() => {
@@ -73,14 +84,99 @@ export default function TellerSummaryPage() {
   }, [navigate])
 
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery<TellerSummaryResponse>({
-    queryKey: ['tellerSummary', page, pageSize],
+    queryKey: ['tellerSummary', page, pageSize, emailFilter, nameFilter, fromDate, toDate],
     queryFn: async () => {
-      const response = await api.get(`/Supervisor/teller-summary?page=${page}&pageSize=${pageSize}`)
+      const params = new URLSearchParams({
+        page: page.toString(),
+        pageSize: pageSize.toString(),
+      })
+
+      if (emailFilter) params.append('email', emailFilter)
+      if (nameFilter) params.append('name', nameFilter)
+      if (fromDate) params.append('fromDate', fromDate)
+      if (toDate) params.append('toDate', toDate)
+
+      const response = await api.get(`/Supervisor/teller-summary?${params.toString()}`)
       return response.data
     },
     staleTime: 30000, // 30 seconds
     retry: 1,
   })
+
+  const hasActiveFilters = emailFilter !== '' || nameFilter !== '' || fromDate !== '' || toDate !== ''
+
+  const clearFilters = () => {
+    setEmailFilter('')
+    setNameFilter('')
+    setFromDate('')
+    setToDate('')
+    setPage(1)
+  }
+
+  const applyFilters = () => {
+    setPage(1) // Reset to first page when filters change
+  }
+
+  const handleDownloadReport = async () => {
+    // Validate date range if provided
+    if (fromDate && toDate && new Date(fromDate) > new Date(toDate)) {
+      toast.error('From Date cannot be later than To Date')
+      return
+    }
+
+    setIsDownloading(true)
+    try {
+      const params = new URLSearchParams()
+
+      if (emailFilter) params.append('email', emailFilter)
+      if (nameFilter) params.append('name', nameFilter)
+      if (fromDate) params.append('fromDate', fromDate)
+      if (toDate) params.append('toDate', toDate)
+
+      const response = await api.get(`/Supervisor/download-teller-summary?${params.toString()}`, {
+        responseType: 'blob',
+      })
+
+      // Create a blob from the response
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      })
+
+      // Create a link element and trigger download
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+      link.download = `Teller_Summary_Report_${timestamp}.xlsx`
+
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      toast.success('Report downloaded successfully!')
+    } catch (error) {
+      console.error('Error downloading report:', error)
+      const axiosError = error as { response?: { data?: Blob }; message?: string }
+      
+      // Try to parse error message from blob
+      if (axiosError.response?.data instanceof Blob) {
+        try {
+          const text = await axiosError.response.data.text()
+          const errorData = JSON.parse(text)
+          toast.error(errorData.message || 'Failed to download report')
+        } catch {
+          toast.error('Failed to download report. Please try again.')
+        }
+      } else {
+        toast.error('Failed to download report. Please try again.')
+      }
+    } finally {
+      setIsDownloading(false)
+    }
+  }
 
   const getCompletionRate = (completed: number, total: number) => {
     if (total === 0) return 0
@@ -140,6 +236,15 @@ export default function TellerSummaryPage() {
             <Button
               variant="outline"
               size="sm"
+              onClick={handleDownloadReport}
+              disabled={isDownloading}
+            >
+              <FiDownload className={`w-4 h-4 ${isDownloading ? 'animate-bounce' : ''}`} />
+              <span className="ml-2">{isDownloading ? 'Downloading...' : 'Download'}</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => refetch()}
               disabled={isFetching}
             >
@@ -150,10 +255,90 @@ export default function TellerSummaryPage() {
         </CardHeader>
 
         <CardContent className="space-y-6">
+          {/* Filters Section */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FiFilter className="w-4 h-4 text-muted-foreground" />
+                <h3 className="font-medium">Filters</h3>
+                {hasActiveFilters && (
+                  <Badge variant="secondary">
+                    {[emailFilter ? 1 : 0, nameFilter ? 1 : 0, fromDate ? 1 : 0, toDate ? 1 : 0].reduce(
+                      (a, b) => a + b,
+                      0
+                    )}{' '}
+                    active
+                  </Badge>
+                )}
+              </div>
+              {hasActiveFilters && (
+                <Button variant="ghost" size="sm" onClick={clearFilters}>
+                  <FiX className="w-4 h-4 mr-1" />
+                  Clear all
+                </Button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Email Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Email</label>
+                <Input
+                  type="text"
+                  placeholder="Search by email"
+                  value={emailFilter}
+                  onChange={(e) => setEmailFilter(e.target.value)}
+                  onBlur={applyFilters}
+                />
+              </div>
+
+              {/* Name Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Name</label>
+                <Input
+                  type="text"
+                  placeholder="Search by name"
+                  value={nameFilter}
+                  onChange={(e) => setNameFilter(e.target.value)}
+                  onBlur={applyFilters}
+                />
+              </div>
+
+              {/* From Date Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">From Date</label>
+                <Input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                  onBlur={applyFilters}
+                  max={toDate || undefined}
+                />
+              </div>
+
+              {/* To Date Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">To Date</label>
+                <Input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                  onBlur={applyFilters}
+                  min={fromDate || undefined}
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Results Section */}
           {data?.data && data.data.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground">
-              <p>No teller data found.</p>
+              <p>{hasActiveFilters ? 'No tellers found matching your filters.' : 'No teller data found.'}</p>
+              {hasActiveFilters && (
+                <Button variant="outline" onClick={clearFilters} className="mt-4">
+                  Clear all filters
+                </Button>
+              )}
             </div>
           ) : data?.data ? (
             <>
